@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { applyPatches, type ChemDraftDocument, type MoleculeObject } from "@chemdraft/chem-core";
+import { applyPatches, serializeDocument, type ChemDraftDocument, type MoleculeObject } from "@chemdraft/chem-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MainWindow } from "./MainWindow";
 import { createPhase4Document, createNativeSingleBondMolecule, selectDocumentObjects } from "./documentWorkflow";
@@ -98,6 +98,39 @@ describe("arrow-key movement in the document window", () => {
   async function command(commandId: string) {
     await act(async () => { window.dispatchEvent(new CustomEvent(DOM_COMMAND_EVENT, { detail: { commandId } })); });
   }
+  async function openDrawing(name: string) {
+    const input = container.querySelector<HTMLInputElement>('input[aria-label="Open native ChemDraft document"]')!;
+    // Match the reported file names, using simple graphs to isolate focus from conformer work.
+    const doc = { ...fixture(), title: name };
+    Object.defineProperty(input, "files", { configurable: true, value: [
+      { name: `${name}.chemdraft`, text: async () => serializeDocument(doc) }
+    ] });
+    await act(async () => { input.dispatchEvent(new Event("change", { bubbles: true })); });
+    expect(snapshot().title).toBe(name);
+  }
+  async function pointerOnMolecule() {
+    const doc = snapshot();
+    const mol = doc.pages[0].objects[0] as MoleculeObject;
+    const page = container.querySelector<HTMLElement>(".page")!;
+    const object = container.querySelector<HTMLElement>(`.document-object[data-object-id="${mol.id}"]`)!;
+    const { width, height } = doc.pages[0];
+    page.getBoundingClientRect = () => ({ x: 0, y: 0, left: 0, top: 0, right: width, bottom: height,
+      width, height, toJSON: () => ({}) });
+    for (const element of [page, object]) {
+      element.setPointerCapture = () => {};
+      element.releasePointerCapture = () => {};
+      element.hasPointerCapture = () => false;
+    }
+    const point = { x: mol.x + mol.width / 2, y: mol.y + mol.height / 2 };
+    for (const type of ["pointerdown", "pointerup"]) {
+      await act(async () => {
+        const event = new MouseEvent(type, { bubbles: true, cancelable: true, button: 0,
+          buttons: type === "pointerup" ? 0 : 1, clientX: point.x, clientY: point.y });
+        Object.defineProperties(event, { pointerId: { value: 17 }, pointerType: { value: "mouse" }, isPrimary: { value: true } });
+        object.dispatchEvent(event);
+      });
+    }
+  }
   it("moves only the selection, retains it, repeats, and supports undo/redo", async () => {
     await render(); const before = snapshot(); const first = before.pages[0].objects[0] as MoleculeObject;
     expect((await key("ArrowRight")).defaultPrevented).toBe(true);
@@ -132,5 +165,87 @@ describe("arrow-key movement in the document window", () => {
     await render(false); const before = snapshot();
     expect((await key("ArrowLeft")).defaultPrevented).toBe(false);
     expect(snapshot().pages[0].objects).toEqual(before.pages[0].objects);
+  });
+  it("moves the selected molecule while a plain drawing-toolbar command retains focus", async () => {
+    await render();
+    const before = snapshot();
+    const select = container.querySelector<HTMLButtonElement>('button[data-command-id="tool.select"]')!;
+    expect(select).not.toBeNull();
+    await act(async () => { select.focus(); select.click(); });
+    expect(document.activeElement).toBe(select);
+    expect((await key("ArrowRight", {}, document.activeElement!)).defaultPrevented).toBe(true);
+    expect(snapshot().pages[0].objects[0].x).toBe(before.pages[0].objects[0].x + 1);
+    expect((await key("ArrowDown", { shiftKey: true }, document.activeElement!)).defaultPrevented).toBe(true);
+    expect(snapshot().pages[0].objects[0].y).toBe(before.pages[0].objects[0].y + 10);
+    expect(snapshot().selection).toEqual(before.selection);
+  });
+  it("keeps a toolbar flyout's ArrowDown and its menu-item navigation out of movement", async () => {
+    await render();
+    const before = snapshot();
+    const bond = container.querySelector<HTMLButtonElement>('button[data-command-id="tool.bond"][aria-haspopup="menu"]')!;
+    expect(bond).not.toBeNull();
+    await act(async () => { bond.focus(); });
+    // An otherwise unclaimed arrow still belongs to the selected drawing.
+    await key("ArrowRight", {}, bond);
+    expect(snapshot().pages[0].objects[0].x).toBe(before.pages[0].objects[0].x + 1);
+    const moved = snapshot();
+    // ArrowDown opens this button's choices instead of moving the molecule.
+    await key("ArrowDown", {}, bond);
+    expect(bond.getAttribute("aria-expanded")).toBe("true");
+    const menu = document.getElementById(bond.getAttribute("aria-controls")!)!;
+    const item = menu.querySelector<HTMLButtonElement>('button[role="menuitem"]')!;
+    await act(async () => { item.focus(); });
+    await key("ArrowRight", {}, item);
+    expect(snapshot().pages[0].objects).toEqual(moved.pages[0].objects);
+  });
+  it("continues movement across three documents and back after pointer tab switches", async () => {
+    await render();
+    const originalX = snapshot().pages[0].objects[0].x;
+    await key("ArrowRight", { shiftKey: true });
+    expect(snapshot().pages[0].objects[0].x).toBe(originalX + 10);
+    const firstTitle = snapshot().title;
+    await openDrawing("Caffeine");
+    await openDrawing("Third");
+    const tabs = [...container.querySelectorAll<HTMLButtonElement>('.document-tab-list button[role="tab"]')];
+    expect(tabs).toHaveLength(3);
+    await act(async () => {
+      window.dispatchEvent(new Event("blur"));
+      window.dispatchEvent(new Event("focus"));
+    });
+    const expectedX = [originalX + 10, originalX, originalX];
+    for (const index of [1, 2, 0, 1, 0]) {
+      await act(async () => {
+        // Model mouse focus, then a real pointer-originated click. jsdom .click() has detail=0.
+        tabs[index].focus();
+        tabs[index].dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }));
+      });
+      expect(snapshot().title).toBe([firstTitle, "Caffeine", "Third"][index]);
+      expect(snapshot().pages[0].objects[0].x).toBe(expectedX[index]);
+      await command("edit.selectAll");
+      const before = snapshot();
+      expect((await key("ArrowRight", { shiftKey: true }, document.activeElement!)).defaultPrevented).toBe(true);
+      expectedX[index] += 10;
+      expect(snapshot().pages[0].objects[0].x).toBe(expectedX[index]);
+      await command("edit.undo");
+      expect(snapshot().pages[0].objects).toEqual(before.pages[0].objects);
+      await command("edit.redo");
+      expect(snapshot().pages[0].objects[0].x).toBe(expectedX[index]);
+    }
+  });
+  it("returns focus from a document tab to the canvas when selecting a molecule", async () => {
+    await render();
+    await openDrawing("Caffeine");
+    const first = container.querySelector<HTMLButtonElement>('.document-tab-list button[role="tab"]')!;
+    await act(async () => { first.focus(); first.click(); });
+    // Keyboard/programmatic tab activation retains focus for tab navigation.
+    expect(document.activeElement).toBe(first);
+    const before = snapshot();
+    expect((await key("ArrowRight", {}, first)).defaultPrevented).toBe(false);
+    expect(snapshot().pages[0].objects).toEqual(before.pages[0].objects);
+    await pointerOnMolecule();
+    expect(document.activeElement).toBe(container.querySelector(".page"));
+    const selected = snapshot();
+    await key("ArrowRight", { shiftKey: true }, document.activeElement!);
+    expect(snapshot().pages[0].objects[0].x).toBe(selected.pages[0].objects[0].x + 10);
   });
 });

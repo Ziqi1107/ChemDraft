@@ -39,11 +39,16 @@ export function nudgeDocumentSelection(
   ])], nudge.dx, nudge.dy, document.selection.pageId);
 }
 
-/** Focused widgets and open menus keep their arrow-key navigation. */
+/** Widgets and menus keep their keys; plain drawing-tool buttons may retain canvas focus. */
 export function selectionNudgeOwnsTarget(target: EventTarget | null): boolean {
   if (typeof Element === "undefined" || !(target instanceof Element)) return true;
-  return !target.closest(
-    "button, input, textarea, select, [contenteditable], [role='menu'], [role='menubar'], " +
+  if (target.closest(
+    "input, textarea, select, [contenteditable], [role='menu'], [role='menubar'], " +
     "[role='menuitem'], [role='slider'], [role='spinbutton'], [role='tablist'], [role='listbox']"
-  );
+  )) return false;
+  const button = target.closest("button");
+  // Clicking a palette command leaves its button focused. Canvas presses prevent the
+  // browser's default focus change, so that focus can survive selecting a structure.
+  // Flyouts still claim their own keys before the global shortcut handler runs.
+  return !button || button.matches(".tool-palette button[data-command-id]");
 }

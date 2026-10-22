@@ -1603,7 +1603,7 @@ const PEN_CONTROL_DRAG_THRESHOLD_PX = 10;
 const LASSO_POINT_SPACING_PX = 3;
 const OBJECT_RESIZE_MIN_SCALE = 0.12;
 const DOCUMENT_OBJECT_LAYER_OFFSET = 20;
-const CURRENT_BUILD_STAMP = "10.22.10.20-codex";
+const CURRENT_BUILD_STAMP = "10.22.11.24-codex";
 /** Whether this page load already asked the native side for a crash note from the last run. */
 let pendingCrashNoteChecked = false;
 const SELECTION_CLIPBOARD_PASTE_OFFSET_PX = 24;
@@ -19440,7 +19440,12 @@ export function MainWindow({
               return (
                 <div className="document-tab" key={tab.id} data-active={active}>
                   <button type="button" role="tab" aria-selected={active}
-                    title={title} onClick={() => void invoke(activateDocumentTabCommandId(tab.id))}>
+                    title={title} onClick={(event) => {
+                      void invoke(activateDocumentTabCommandId(tab.id));
+                      // Pointer tab activation returns to drawing. Keyboard activation keeps
+                      // focus on the tab so its controls retain their own navigation keys.
+                      if (event.detail > 0) pageRef.current?.focus({ preventScroll: true });
+                    }}>
                     <span>{title}</span>{file?.dirty ? <span aria-label="Unsaved changes"> •</span> : null}
                   </button>
                   <button type="button" className="document-tab-close" aria-label={`Close ${title}`}
@@ -19489,6 +19494,16 @@ export function MainWindow({
                 ref={pageRef}
                 className={["page", crosshairsVisible ? "crosshairs-visible" : "crosshairs-hidden"].join(" ")}
                 aria-label={document.title}
+                tabIndex={-1}
+                onPointerDownCapture={(event) => {
+                  // Canvas handlers prevent default pointer focus while selecting/drawing.
+                  // Explicitly release stale tab/toolbar focus, but never steal an editor's
+                  // caret or a canvas control's arrow keys.
+                  if (event.button === 0 && !activeTextEditObjectIdRef.current &&
+                    !activeAtomLabelEditRef.current && selectionNudgeOwnsTarget(event.target)) {
+                    event.currentTarget.focus({ preventScroll: true });
+                  }
+                }}
                 onPointerDown={handlePagePointerDown}
                 onPointerMove={handlePagePointerMove}
                 onPointerUp={handlePagePointerUp}

@@ -19,6 +19,10 @@ Hold Shift for ten-pixel steps. Multiple selected objects move together, stay in
 and keep their selection; Undo/Redo records each step. A selected molecule part moves its whole
 molecule rigidly. Movement is independent of zoom. Text editors, controls, menus, and active drawing
 gestures keep their own arrow-key behavior. These bindings apply to both keyboard shortcut schemes.
+Movement also works when a plain drawing-toolbar button retains focus after a click; a toolbar
+flyout's own arrow navigation still takes precedence.
+Clicking a document tab or selecting on the canvas returns keyboard focus to the drawing, so
+movement continues across open files. Keyboard activation of a tab keeps focus on that tab.
 
 File > Export includes a preview of the actual exported SVG, PDF, or native raster bytes,
 linked or independent pixel and physical dimensions, DPI, page/content cropping, background controls,

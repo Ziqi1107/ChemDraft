@@ -8,6 +8,16 @@ in progress rather than a changelog.
 
 # In flight
 
+Follow-up: fix arrow-key movement stopping after clicking a drawing toolbar or switching document
+tabs. Pointer tab activation and canvas selection return focus to the drawing; keyboard tab
+activation, text/atom editors, menus, and controls retain their keys. Add regression tests for
+three-file switching, returning to the first file, blur/focus, independent Undo/Redo, and canvas
+re-entry. Scope remains this arrow-key contribution. The local combined test branch passed ten
+relevant suites (429 tests, one skipped), TypeScript checking, and the browser production build.
+Native Windows/macOS testing and contributor confirmation of this follow-up remain pending.
+Isolated worktree reruns were blocked by dependency junction permissions; no new passing result is claimed here.
+Build: `10.22.11.24-codex`.
+
 Branch `feature/arrow-key-movement`: add command-backed movement of selected structures and drawing
 objects with arrow keys (one page pixel) or Shift+arrows (ten). Preserve grouping, page bounds,
 selection, chemical identity, and Undo/Redo. A molecule-part selection moves its whole molecule
@@ -20,7 +30,7 @@ Browser acceptance: the contributor reports the behavior works in the local test
 Local checks: 816 focused tests, root TypeScript checking, the browser production build, and
 `git diff --check` passed. Shortcut tests cover both Windows and macOS mappings.
 This slice remains in draft review until required CI and native Windows/macOS checks pass.
-Native verification is pending because Rust/Cargo and the C++ workload are unavailable here.
+Native Windows/macOS hands-on verification remains pending.
 An earlier full-suite attempt reported failures and did not complete; it is not a passing result.
 
 ---

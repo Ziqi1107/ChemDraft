@@ -6,6 +6,13 @@ page-edge clamping, Undo/Redo, save/reopen, and the same page-space step at diff
 second page. A part selection moves its parent molecule rigidly, without changing atom/bond identity.
 Arrow keys in text/atom editors, menus, sliders, and other controls must never move the drawing;
 neither should keys during a pointer drag, IME composition, or a modal dialog.
+Click a plain drawing-toolbar command and then the selected structure: movement must still work
+when the toolbar button retains focus. ArrowDown on a flyout trigger must open its choices, and
+arrows in its menu items must not move the drawing.
+Open three files, move a selection in the first, switch to each other file with the mouse, and
+return to the first. Selected structures must still move with arrows, with independent Undo/Redo.
+Repeat after leaving and returning to the app, and after selecting on the canvas while a document
+tab or widget previously held focus. Clicking a text editor/control must keep its own keyboard focus.
 
 The standing hands-on checklist for interactive surfaces. It moved here from `AGENTS.md` §20 when that
 file was consolidated (2026-10-04); `AGENTS.md` §14 still requires it. Run every item on **macOS and
